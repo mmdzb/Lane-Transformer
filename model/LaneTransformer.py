@@ -9,7 +9,7 @@ import time
 from model.SubNet import ActorSubNet, MapSubNet
 from model.lib import Encoder_MLP, Decoder_MLP, Goal_Decoder_MLP, Smooth_Encoder
 from model.TransformerDecoder import TransformerDecoder
-from model.LaneGCN_lib import Pred
+from model.Decoder import Pred
 
 class LaneTransformer(nn.Module):
     def __init__(self, args):
