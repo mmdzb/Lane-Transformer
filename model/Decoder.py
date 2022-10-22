@@ -54,7 +54,7 @@ class LinearRes(nn.Module):
 
         out = self.relu(out)
         return out
-
+    
 class Linear(nn.Module):
     def __init__(self, n_in, n_out, norm='GN', ng=32, act=True):
         super(Linear, self).__init__()
@@ -96,10 +96,10 @@ class AttDest(nn.Module):
     def forward(self, agts, agt_ctrs, dest_ctrs):
         n_agt = agts.size(1)
         num_mods = dest_ctrs.size(1)
-
-        dist = (agt_ctrs.unsqueeze(1) - dest_ctrs).view(-1, 2)
+        bs = dest_ctrs.shape[0]
+        dist = (agt_ctrs.unsqueeze(1) - dest_ctrs).view(bs*num_mods, 2)
         dist = self.dist(dist)
-        agts = agts.unsqueeze(1).repeat(1, num_mods, 1).view(-1, n_agt)
+        agts = agts.unsqueeze(1).repeat(1, num_mods, 1).view(bs*num_mods, n_agt)
 
         agts = torch.cat((dist, agts), 1)
         agts = self.agt(agts)
@@ -135,22 +135,23 @@ class Pred(nn.Module):
         for i in range(len(self.pred)):
             preds.append(self.pred[i](actors))
         reg = torch.cat([x.unsqueeze(1) for x in preds], 1)
-        reg = reg.view(reg.size(0), reg.size(1), -1, 2)
-
-        for i in range(actors.shape[0]):
+        reg = reg.view(reg.size(0), reg.size(1), 30, 2)
+        bs = reg.shape[0]
+        num_mod = reg.shape[1]
+        for i in range(len(actor_idcs)):
             idcs = actor_idcs[i]
-            ctrs = actor_ctrs[i].view(-1, 1, 1, 2)
+            ctrs = actor_ctrs[i].view(1, 1, 1, 2)
             reg[idcs] = reg[idcs] + ctrs
-
-        dest_ctrs = reg[:, :, -1].detach()
+        last = reg.shape[2]-1
+        dest_ctrs = reg[:, :, last].detach()
         feats = self.att_dest(actors, torch.vstack(actor_ctrs), dest_ctrs)
-        cls = self.cls(feats).view(-1, 6)
+        cls = self.cls(feats).view(bs, 6)
 
         cls, sort_idcs = cls.sort(1, descending=True)
-        row_idcs = torch.arange(len(sort_idcs)).long().to(sort_idcs.device)
-        row_idcs = row_idcs.view(-1, 1).repeat(1, sort_idcs.size(1)).view(-1)
-        sort_idcs = sort_idcs.view(-1)
-        reg = reg[row_idcs, sort_idcs].view(cls.size(0), cls.size(1), -1, 2)
+        row_idcs = torch.arange(sort_idcs.shape[0]).long().to(sort_idcs.device)
+        row_idcs = row_idcs.view(bs, 1).repeat(1, sort_idcs.size(1)).view(bs*num_mod)
+        sort_idcs = sort_idcs.view(sort_idcs.shape[0]*sort_idcs.shape[1])
+        reg = reg[row_idcs, sort_idcs].view(cls.size(0), cls.size(1), 30, 2)
 
         out = dict()
         out["cls"], out["reg"] = [], []
